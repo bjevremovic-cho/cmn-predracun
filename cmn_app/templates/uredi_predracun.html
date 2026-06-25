@@ -1,0 +1,336 @@
+{% extends "base.html" %}
+{% block title %}Uredi Predračun {{ p.broj }}{% endblock %}
+{% block page_title %}<i class="fa fa-pen text-warning me-2"></i>Uredi Predračun — {{ p.broj }}{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+  <div class="col-lg-8">
+
+    <!-- Podaci predracuna -->
+    <div class="card mb-3">
+      <div class="card-header py-2"><i class="fa fa-info-circle text-primary me-1"></i> Podaci predračuna</div>
+      <div class="card-body pb-2">
+        <div class="row g-2">
+          <div class="col-md-4">
+            <label class="form-label">Broj predračuna</label>
+            <input type="text" id="inp-broj" class="form-control" value="{{ p.broj }}">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Datum izdavanja</label>
+            <input type="text" id="inp-dizd" class="form-control datepicker" value="{{ p.datum_izd }}" placeholder="dd.mm.yyyy." autocomplete="off">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Datum valute</label>
+            <input type="text" id="inp-dval" class="form-control datepicker" value="{{ p.datum_val }}" placeholder="dd.mm.yyyy." autocomplete="off">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Događaj / Opis</label>
+            <select id="inp-dog" class="form-select">
+              <option value="">— Izaberi događaj —</option>
+              {% for d in dogadjaji %}
+              <option value="{{ d.id }}" data-naziv="{{ d.naziv }}" data-datum="{{ d.datum }}"
+                {% if d.id == p.dogadjaj_id %}selected{% endif %}>
+                {{ d.naziv }} {% if d.datum %}({{ d.datum }}){% endif %}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Kupac -->
+    <div class="card mb-3">
+      <div class="card-header py-2"><i class="fa fa-user text-primary me-1"></i> Kupac</div>
+      <div class="card-body pb-2">
+        <div class="row g-2 align-items-end">
+          <div class="col-md-6">
+            <label class="form-label mb-1">Pretraži (PIB / JBKJS / Naziv)</label>
+            <input type="text" id="inp-pret" class="form-control" value="{{ p.kupac_naziv }}"
+                   oninput="searchKupac(this.value)" autocomplete="off">
+            <div id="kupac-dropdown" class="list-group mt-1 position-absolute" style="z-index:999;max-height:240px;overflow-y:auto;width:380px;display:none;"></div>
+          </div>
+        </div>
+        <!-- Trenutni kupac uvek prikazan -->
+        <div id="kupac-info" class="mt-2 p-2 rounded" style="background:#f8f9ff;border:1px solid #dde3f0;">
+          <strong id="ki-naziv">{{ p.kupac_naziv }}</strong>
+          <span class="text-muted ms-2" id="ki-pib">{% if p.kupac_pib %}PIB: {{ p.kupac_pib }}{% endif %}</span>
+          <span class="text-muted ms-1" id="ki-jbkjs">{% if p.kupac_jbkjs %}JBKJS: {{ p.kupac_jbkjs }}{% endif %}</span>
+          <div class="text-muted small" id="ki-adresa">{{ p.kupac_adresa }} {{ p.kupac_mesto }}</div>
+        </div>
+        <div class="mt-2">
+          <label class="form-label">Dodatni opis <small class="text-muted">(prikazuje se na predračunu ispod PIB/MB/JBKJS)</small></label>
+          <textarea id="inp-extra" class="form-control form-control-sm" rows="3" placeholder="Npr: Sektor za javne nabavke&#10;Odeljenje za upravljanje projektima...">{{ p.kupac_extra or '' }}</textarea>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stavke -->
+    <div class="card mb-3">
+      <div class="card-header py-2"><i class="fa fa-list text-primary me-1"></i> Stavke predračuna</div>
+      <div class="card-body">
+        <div class="row g-2 mb-2 align-items-end">
+          <div class="col-md-6">
+            <label class="form-label">Iz cenovnika</label>
+            <select id="inp-cenovnik" class="form-select form-select-sm" onchange="izCenovnika()">
+              <option value="">— Izaberi uslugu —</option>
+              {% for c in cenovnik %}
+              <option value="{{ c.id }}" data-naziv="{{ c.naziv }}" data-cena="{{ c.cena }}" data-pdv="{{ c.pdv }}">{{ c.naziv }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="row g-2 mb-3 align-items-end">
+          <div class="col-md-5">
+            <label class="form-label">Naziv usluge</label>
+            <input type="text" id="inp-naz" class="form-control form-control-sm" placeholder="Naziv...">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Cena/kom</label>
+            <input type="number" id="inp-cena" class="form-control form-control-sm" step="0.01">
+          </div>
+          <div class="col-md-1">
+            <label class="form-label">Kol.</label>
+            <input type="number" id="inp-kol" class="form-control form-control-sm" value="1">
+          </div>
+          <div class="col-md-1">
+            <label class="form-label">PDV%</label>
+            <input type="number" id="inp-pdv" class="form-control form-control-sm" value="20">
+          </div>
+          <div class="col-auto">
+            <button class="btn btn-sm btn-primary" onclick="dodajStavku()"><i class="fa fa-plus"></i> Dodaj</button>
+          </div>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-sm table-hover table-bordered mb-0" id="stavke-table">
+            <thead>
+              <tr>
+                <th style="width:40%">Naziv usluge</th>
+                <th class="text-center" style="width:6%">Kol.</th>
+                <th class="text-end" style="width:13%">Cena/kom</th>
+                <th class="text-end" style="width:13%">Bez PDV</th>
+                <th class="text-center" style="width:8%">PDV%</th>
+                <th class="text-end" style="width:14%">Sa PDV</th>
+                <th style="width:6%"></th>
+              </tr>
+            </thead>
+            <tbody id="stavke-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Specifikacija -->
+    <div class="card mb-3">
+      <div class="card-header py-2"><i class="fa fa-align-left text-primary me-1"></i> Specifikacija <small class="text-muted">(ispod ukupnog iznosa, italic)</small></div>
+      <div class="card-body pb-2">
+        <textarea id="inp-spec" class="form-control" rows="3" placeholder="Opis paketa usluga...">{{ p.specifikacija or '' }}</textarea>
+      </div>
+    </div>
+
+    <!-- Napomena na predračunu -->
+    <div class="card mb-3">
+      <div class="card-header py-2"><i class="fa fa-comment text-primary me-1"></i> Napomena <small class="text-muted">(vidljiva na predračunu)</small></div>
+      <div class="card-body pb-2">
+        <textarea id="inp-nap" class="form-control" rows="2" placeholder="Napomena koja će biti prikazana na predračunu...">{{ p.napomena_predracun or '' }}</textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: totals + actions -->
+  <div class="col-lg-4">
+    <div class="card mb-3 sticky-top" style="top:72px;">
+      <div class="card-header py-2"><i class="fa fa-calculator text-primary me-1"></i> Rekapitulacija</div>
+      <div class="card-body">
+        <table class="table table-sm mb-0">
+          <tr><td class="text-muted">Osnovica:</td><td class="text-end fw-bold" id="t-osnov">0,00 RSD</td></tr>
+          <tr><td class="text-muted">PDV:</td><td class="text-end fw-bold" id="t-pdv">0,00 RSD</td></tr>
+          <tr style="border-top:2px solid #1565C0;">
+            <td><strong style="color:#1565C0;">UKUPNO:</strong></td>
+            <td class="text-end" style="font-size:18px;font-weight:800;color:#1565C0;" id="t-uk">0,00 RSD</td>
+          </tr>
+        </table>
+        <hr>
+        <button class="btn btn-warning w-100 mb-2" onclick="sacuvajIzmene()">
+          <i class="fa fa-save me-1"></i> Sačuvaj izmene
+        </button>
+        <button class="btn btn-success w-100 mb-2" onclick="sacuvajIPreuzmi()">
+          <i class="fa fa-file-pdf me-1"></i> Sačuvaj i preuzmi PDF
+        </button>
+        <a href="/evidencija" class="btn btn-outline-secondary w-100">
+          <i class="fa fa-arrow-left me-1"></i> Nazad na evidenciju
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Učitaj postojeće stavke
+let stavke = {{ p.stavke | safe }};
+if (typeof stavke === 'string') { try { stavke = JSON.parse(stavke); } catch(e) { stavke = []; } }
+
+let kupac = {
+  naziv:   "{{ p.kupac_naziv | replace('"', '\\"') }}",
+  pib:     "{{ p.kupac_pib or '' }}",
+  mb:      "{{ p.kupac_mb or '' }}",
+  adresa:  "{{ p.kupac_adresa or '' }}",
+  mesto:   "{{ p.kupac_mesto or '' }}",
+  jbkjs:   "{{ p.kupac_jbkjs or '' }}"
+};
+
+let searchTimeout = null;
+
+function fmtBr(x){
+  try{return parseFloat(x).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2});}catch{return '0,00';}
+}
+
+// Kupac search
+function searchKupac(val){
+  clearTimeout(searchTimeout);
+  const dd = document.getElementById('kupac-dropdown');
+  if(val.length < 2){dd.style.display='none';return;}
+  searchTimeout = setTimeout(async ()=>{
+    const r = await fetch('/api/kupci/search?q='+encodeURIComponent(val));
+    const data = await r.json();
+    dd.innerHTML = '';
+    if(!data.length){dd.style.display='none';return;}
+    data.forEach(k=>{
+      const a = document.createElement('a');
+      a.href='#'; a.className='list-group-item list-group-item-action py-1 px-2';
+      a.style.fontSize='12px';
+      a.innerHTML=`<strong>${k.naziv}</strong> <span class="text-muted">PIB: ${k.pib||''}</span><br><small class="text-muted">${k.adresa||''}, ${k.mesto||''}</small>`;
+      a.onclick=(e)=>{e.preventDefault();setKupac(k);dd.style.display='none';};
+      dd.appendChild(a);
+    });
+    dd.style.display='block';
+  }, 250);
+}
+
+function setKupac(k){
+  kupac = k;
+  document.getElementById('inp-pret').value = k.naziv;
+  document.getElementById('ki-naziv').textContent = k.naziv;
+  document.getElementById('ki-pib').textContent = k.pib ? 'PIB: '+k.pib : '';
+  document.getElementById('ki-jbkjs').textContent = k.jbkjs ? 'JBKJS: '+k.jbkjs : '';
+  document.getElementById('ki-adresa').textContent = [k.adresa,k.mesto].filter(Boolean).join(', ');
+}
+
+// Cenovnik
+function izCenovnika(){
+  const opt = document.getElementById('inp-cenovnik').selectedOptions[0];
+  if(!opt.value) return;
+  document.getElementById('inp-naz').value = opt.dataset.naziv;
+  document.getElementById('inp-cena').value = opt.dataset.cena;
+  document.getElementById('inp-pdv').value = opt.dataset.pdv;
+  document.getElementById('inp-kol').value = 1;
+}
+
+// Stavke
+function dodajStavku(){
+  const naziv = document.getElementById('inp-naz').value.trim();
+  const cena  = parseFloat(document.getElementById('inp-cena').value)||0;
+  const kol   = parseInt(document.getElementById('inp-kol').value)||1;
+  const pdv   = parseFloat(document.getElementById('inp-pdv').value)||20;
+  if(!naziv||!cena){alert('Unesite naziv i cenu!');return;}
+  stavke.push({naziv,cena,kolicina:kol,pdv});
+  renderStavke();
+  document.getElementById('inp-naz').value='';
+  document.getElementById('inp-cena').value='';
+  document.getElementById('inp-kol').value='1';
+  document.getElementById('inp-cenovnik').value='';
+}
+
+function renderStavke(){
+  const tbody = document.getElementById('stavke-tbody');
+  tbody.innerHTML='';
+  if(!stavke.length){
+    tbody.innerHTML='<tr><td colspan="7" class="text-center text-muted py-3">Nema stavki</td></tr>';
+    updateTotals(); return;
+  }
+  stavke.forEach((s,i)=>{
+    const bez=s.cena*s.kolicina; const sa=bez*(1+s.pdv/100);
+    const tr=document.createElement('tr');
+    tr.innerHTML=`
+      <td>${s.naziv}</td>
+      <td class="text-center">${s.kolicina}</td>
+      <td class="text-end">${fmtBr(s.cena)}</td>
+      <td class="text-end">${fmtBr(bez)}</td>
+      <td class="text-center">${s.pdv}%</td>
+      <td class="text-end fw-bold">${fmtBr(sa)}</td>
+      <td class="text-center"><a href="#" onclick="stavke.splice(${i},1);renderStavke();return false;" class="text-danger"><i class="fa fa-times"></i></a></td>`;
+    tbody.appendChild(tr);
+  });
+  updateTotals();
+}
+
+function updateTotals(){
+  let osnov=0,pdv_t=0;
+  stavke.forEach(s=>{const b=s.cena*s.kolicina;osnov+=b;pdv_t+=b*s.pdv/100;});
+  document.getElementById('t-osnov').textContent=fmtBr(osnov)+' RSD';
+  document.getElementById('t-pdv').textContent=fmtBr(pdv_t)+' RSD';
+  document.getElementById('t-uk').textContent=fmtBr(osnov+pdv_t)+' RSD';
+}
+
+function getPayload(){
+  const opt = document.getElementById('inp-dog').selectedOptions[0];
+  return {
+    broj: document.getElementById('inp-broj').value,
+    datum_izd: document.getElementById('inp-dizd').value,
+    datum_val: document.getElementById('inp-dval').value,
+    kupac_naziv: kupac.naziv, kupac_pib: kupac.pib, kupac_mb: kupac.mb||'',
+    kupac_adresa: kupac.adresa, kupac_mesto: kupac.mesto, kupac_jbkjs: kupac.jbkjs||'',
+    kupac_extra: document.getElementById('inp-extra').value,
+    dogadjaj_id: opt.value||null,
+    napomena: document.getElementById('inp-nap').value,
+    specifikacija: document.getElementById('inp-spec').value,
+    stavke
+  };
+}
+
+async function sacuvajIzmene(){
+  if(!stavke.length){alert('Nema stavki!');return;}
+  const r = await fetch('/predracun/azuriraj/{{ p.id }}',{
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(getPayload())
+  });
+  const d = await r.json();
+  if(d.ok){ alert('Predračun uspešno sačuvan!'); window.location='/evidencija'; }
+  else alert('Greška!');
+}
+
+async function sacuvajIPreuzmi(){
+  if(!stavke.length){alert('Nema stavki!');return;}
+  const r = await fetch('/predracun/azuriraj/{{ p.id }}',{
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(getPayload())
+  });
+  const d = await r.json();
+  if(d.ok){ window.open('/predracun/pdf/{{ p.id }}','_blank'); window.location='/evidencija'; }
+  else alert('Greška!');
+}
+
+
+// Datepicker
+window.addEventListener("load", function(){
+  if(typeof flatpickr !== 'undefined'){
+    flatpickr("#inp-dizd", {dateFormat:"d.m.Y.", allowInput:true});
+    flatpickr("#inp-dval", {dateFormat:"d.m.Y.", allowInput:true});
+  }
+});
+
+document.addEventListener('click',e=>{
+  if(!e.target.closest('#inp-pret')&&!e.target.closest('#kupac-dropdown'))
+    document.getElementById('kupac-dropdown').style.display='none';
+});
+
+// Init
+renderStavke();
+</script>
+{% endblock %}

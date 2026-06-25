@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block title %}Cenovnik{% endblock %}
+{% block page_title %}<i class="fa fa-tags text-primary me-2"></i>Cenovnik usluga{% endblock %}
+
+{% block content %}
+<div class="card">
+  <div class="card-header py-2 d-flex justify-content-between align-items-center">
+    <span>Cenovnik</span>
+    <div class="d-flex gap-2">
+      <a href="/cenovnik?sve={{ '0' if prikazi_sve else '1' }}" class="btn btn-sm btn-outline-secondary">
+        {{ 'Prikaži samo aktivne' if prikazi_sve else 'Prikaži sve' }}
+      </a>
+      <button class="btn btn-sm btn-success" onclick="showNovaCena()"><i class="fa fa-plus me-1"></i>Nova usluga</button>
+    </div>
+  </div>
+  <div class="card-body p-0">
+    <table class="table table-hover table-sm mb-0">
+      <thead>
+        <tr>
+          <th>Naziv usluge</th>
+          <th class="text-end">Cena (bez PDV)</th>
+          <th class="text-center">PDV %</th>
+          <th class="text-end">Cena sa PDV</th>
+          <th class="text-center">Status</th>
+          <th class="text-center">Akcija</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr {% if r.status=='NEAKTIVNA' %}style="opacity:.55;"{% endif %}>
+          <td>{{ r.naziv }}</td>
+          <td class="text-end">{{ r.cena|fmt_br }}</td>
+          <td class="text-center">{{ r.pdv }}%</td>
+          <td class="text-end fw-bold">{{ (r.cena * (1 + r.pdv/100))|fmt_br }}</td>
+          <td class="text-center">
+            <span class="badge {% if r.status=='AKTIVNA' %}bg-success{% else %}bg-secondary{% endif %}">
+              {{ r.status }}
+            </span>
+          </td>
+          <td class="text-center">
+            <button class="btn btn-xs btn-sm btn-outline-primary py-0 px-1 me-1"
+                    onclick="urediCenu({{ r.id }})">
+              <i class="fa fa-pen"></i> Uredi
+            </button>
+            <button class="btn btn-xs btn-sm btn-outline-{{ 'warning' if r.status=='AKTIVNA' else 'success' }} py-0 px-1"
+                    onclick="toggleStatus({{ r.id }},'{{ 'NEAKTIVNA' if r.status=='AKTIVNA' else 'AKTIVNA' }}',this)">
+              {{ '⏸ Deaktiviraj' if r.status=='AKTIVNA' else '▶ Aktiviraj' }}
+            </button>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="text-center text-muted py-4">Nema usluga u cenovniku</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="modal fade" id="novaCenaModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header"><h6 class="modal-title">Nova usluga</h6><button class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <div class="mb-2"><label class="form-label">Naziv usluge *</label><textarea id="nc-naziv" class="form-control" rows="2"></textarea></div>
+        <div class="row g-2">
+          <div class="col-6"><label class="form-label">Cena (bez PDV) *</label><input type="number" id="nc-cena" class="form-control" step="0.01"></div>
+          <div class="col-6"><label class="form-label">PDV %</label><input type="number" id="nc-pdv" class="form-control" value="20"></div>
+        </div>
+        <div class="mt-2"><label class="form-label">Specifikacija <small class="text-muted">(prikazuje se na predračunu ispod iznosa)</small></label>
+          <textarea id="nc-spec" class="form-control" rows="3" placeholder="Opis paketa usluga..."></textarea></div>
+      </div>
+      <div class="modal-footer py-2">
+        <button class="btn btn-success btn-sm" onclick="sacuvajCenu()"><i class="fa fa-save me-1"></i>Sačuvaj</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal uredi -->
+<div class="modal fade" id="urediCenaModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header"><h6 class="modal-title"><i class="fa fa-pen me-1"></i>Uredi uslugu</h6><button class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <input type="hidden" id="uc-id">
+        <div class="mb-2"><label class="form-label">Naziv usluge *</label><textarea id="uc-naziv" class="form-control" rows="2"></textarea></div>
+        <div class="row g-2">
+          <div class="col-6"><label class="form-label">Cena (bez PDV) *</label><input type="number" id="uc-cena" class="form-control" step="0.01"></div>
+          <div class="col-6"><label class="form-label">PDV %</label><input type="number" id="uc-pdv" class="form-control"></div>
+        </div>
+        <div class="mt-2"><label class="form-label">Specifikacija <small class="text-muted">(prikazuje se na predračunu ispod iznosa)</small></label>
+          <textarea id="uc-spec" class="form-control" rows="4" placeholder="Opis paketa usluga..."></textarea></div>
+      </div>
+      <div class="modal-footer py-2">
+        <button class="btn btn-primary btn-sm" onclick="sacuvajIzmenuCene()"><i class="fa fa-save me-1"></i>Sačuvaj izmene</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function showNovaCena(){new bootstrap.Modal(document.getElementById('novaCenaModal')).show();}
+async function sacuvajCenu(){
+  const naziv=document.getElementById('nc-naziv').value.trim();
+  const cena=document.getElementById('nc-cena').value;
+  if(!naziv||!cena){alert('Naziv i cena su obavezni!');return;}
+  const r=await fetch('/cenovnik/novi',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({naziv,cena:parseFloat(cena),pdv:parseInt(document.getElementById('nc-pdv').value)||20,
+      specifikacija:document.getElementById('nc-spec').value})});
+  const d=await r.json();
+  if(d.ok){location.reload();}
+}
+async function urediCenu(id){
+  const r=await fetch('/api/cenovnik/'+id);
+  const d=await r.json();
+  document.getElementById('uc-id').value=id;
+  document.getElementById('uc-naziv').value=d.naziv||'';
+  document.getElementById('uc-cena').value=d.cena||'';
+  document.getElementById('uc-pdv').value=d.pdv||20;
+  document.getElementById('uc-spec').value=d.specifikacija||'';
+  new bootstrap.Modal(document.getElementById('urediCenaModal')).show();
+}
+async function sacuvajIzmenuCene(){
+  const id=document.getElementById('uc-id').value;
+  const naziv=document.getElementById('uc-naziv').value.trim();
+  const cena=document.getElementById('uc-cena').value;
+  if(!naziv||!cena){alert('Naziv i cena su obavezni!');return;}
+  const r=await fetch('/cenovnik/uredi/'+id,{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({naziv,cena:parseFloat(cena),pdv:parseInt(document.getElementById('uc-pdv').value)||20,
+      specifikacija:document.getElementById('uc-spec').value})});
+  const d=await r.json();
+  if(d.ok){location.reload();}
+}
+async function toggleStatus(id,status,btn){
+  await fetch('/cenovnik/status/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status})});
+  location.reload();
+}
+</script>
+{% endblock %}

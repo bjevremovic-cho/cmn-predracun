@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}Kupci{% endblock %}
+{% block page_title %}<i class="fa fa-users text-primary me-2"></i>Baza kupaca{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+  <div class="col-lg-8">
+    <div class="card">
+      <div class="card-header py-2 d-flex justify-content-between align-items-center">
+        <span>Kupci <span class="badge bg-secondary ms-1">{{ total }}</span></span>
+        <button class="btn btn-sm btn-success" onclick="showNoviKupac()"><i class="fa fa-plus me-1"></i>Novi kupac</button>
+      </div>
+      <div class="card-body py-2">
+        <form class="d-flex gap-2 mb-3" method="GET">
+          <input type="text" name="q" class="form-control form-control-sm" placeholder="Pretraži po nazivu, PIB-u ili JBKJS-u..." value="{{ search }}" style="max-width:380px;">
+          <button type="submit" class="btn btn-sm btn-primary"><i class="fa fa-search"></i></button>
+          {% if search %}<a href="/kupci" class="btn btn-sm btn-outline-secondary"><i class="fa fa-xmark"></i></a>{% endif %}
+        </form>
+        <div class="table-responsive">
+          <table class="table table-sm table-hover">
+            <thead>
+              <tr>
+                <th>Naziv</th>
+                <th>PIB</th>
+                <th>MB</th>
+                <th>JBKJS</th>
+                <th>Adresa</th>
+                <th>Mesto</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in rows %}
+              <tr>
+                <td style="max-width:250px;">{{ r.naziv }}</td>
+                <td>{{ r.pib }}</td>
+                <td>{{ r.mb }}</td>
+                <td>{{ r.jbkjs }}</td>
+                <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ r.adresa }}</td>
+                <td>{{ r.mesto }}</td>
+              </tr>
+              {% else %}
+              <tr><td colspan="6" class="text-center text-muted py-3">Nema rezultata</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% if not search %}
+        <p class="text-muted small mb-0">Prikazano prvih 100. Koristite pretragu za specifičan kupac.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal novi kupac -->
+  <div class="modal fade" id="noviKupacModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header"><h6 class="modal-title"><i class="fa fa-user-plus me-1"></i>Novi kupac</h6><button class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <div class="row g-2">
+            <div class="col-12"><label class="form-label">Naziv *</label><input type="text" id="nk-naziv" class="form-control form-control-sm"></div>
+            <div class="col-6"><label class="form-label">PIB *</label><input type="text" id="nk-pib" class="form-control form-control-sm"></div>
+            <div class="col-6"><label class="form-label">MB</label><input type="text" id="nk-mb" class="form-control form-control-sm"></div>
+            <div class="col-8"><label class="form-label">Adresa</label><input type="text" id="nk-adresa" class="form-control form-control-sm"></div>
+            <div class="col-4"><label class="form-label">Mesto</label><input type="text" id="nk-mesto" class="form-control form-control-sm"></div>
+            <div class="col-6"><label class="form-label">JBKJS</label><input type="text" id="nk-jbkjs" class="form-control form-control-sm"></div>
+          </div>
+        </div>
+        <div class="modal-footer py-2">
+          <button class="btn btn-success btn-sm" onclick="sacuvajKupca()"><i class="fa fa-save me-1"></i>Sačuvaj</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function showNoviKupac(){new bootstrap.Modal(document.getElementById('noviKupacModal')).show();}
+async function sacuvajKupca(){
+  const naziv=document.getElementById('nk-naziv').value.trim();
+  const pib=document.getElementById('nk-pib').value.trim();
+  if(!naziv||!pib){alert('Naziv i PIB su obavezni!');return;}
+  const r=await fetch('/kupci/novi',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      naziv, pib,
+      mb:document.getElementById('nk-mb').value,
+      adresa:document.getElementById('nk-adresa').value,
+      mesto:document.getElementById('nk-mesto').value,
+      jbkjs:document.getElementById('nk-jbkjs').value
+    })});
+  const d=await r.json();
+  if(d.ok){location.reload();}
+}
+</script>
+{% endblock %}
