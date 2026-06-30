@@ -311,20 +311,33 @@ def backup_db():
         return send_file(db_path, mimetype='application/octet-stream',
                         as_attachment=True, download_name=fname)
     else:
-        # PostgreSQL - export evidencija as JSON
+        # PostgreSQL - export svih tabela kao JSON
         rows = q("SELECT * FROM evidencija ORDER BY id")
         kupci = q("SELECT * FROM kupci ORDER BY naziv")
         cenovnik = q("SELECT * FROM cenovnik ORDER BY naziv")
         dogadjaji = q("SELECT * FROM dogadjaji ORDER BY id")
+        korisnici_data = q("SELECT id, ime, username, aktivan, admin FROM korisnici")
+
+        def to_list(rs):
+            # q() already returns list of dicts for PG, list of sqlite3.Row for sqlite
+            out = []
+            for r in rs:
+                try:
+                    out.append(dict(r))
+                except Exception:
+                    out.append(r)
+            return out
+
         data = {
-            'evidencija': [dict(r) for r in rows],
-            'kupci': [dict(r) for r in kupci],
-            'cenovnik': [dict(r) for r in cenovnik],
-            'dogadjaji': [dict(r) for r in dogadjaji],
+            'evidencija': to_list(rows),
+            'kupci': to_list(kupci),
+            'cenovnik': to_list(cenovnik),
+            'dogadjaji': to_list(dogadjaji),
+            'korisnici': to_list(korisnici_data),
         }
         fname = f"cmn_backup_{datetime.now().strftime('%Y%m%d_%H%M')}.json"
         return send_file(
-            io.BytesIO(json.dumps(data, ensure_ascii=False, indent=2).encode('utf-8')),
+            io.BytesIO(json.dumps(data, ensure_ascii=False, indent=2, default=str).encode('utf-8')),
             mimetype='application/json',
             as_attachment=True,
             download_name=fname
