@@ -300,48 +300,36 @@ def set_dog_status(did):
 @login_required
 @admin_required
 def backup_db():
-    """Download backup - SQLite file or CSV export for PostgreSQL."""
+    """Download backup as Excel file."""
+    import pandas as pd
     from datetime import datetime
-    import os
     DATABASE_URL = os.environ.get('DATABASE_URL', '')
-    if not DATABASE_URL:
-        # SQLite - download file
-        db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'instance', 'cmn.db')
-        fname = f"cmn_backup_{datetime.now().strftime('%Y%m%d_%H%M')}.db"
-        return send_file(db_path, mimetype='application/octet-stream',
-                        as_attachment=True, download_name=fname)
-    else:
-        # PostgreSQL - export svih tabela kao JSON
-        rows = q("SELECT * FROM evidencija ORDER BY id")
-        kupci = q("SELECT * FROM kupci ORDER BY naziv")
-        cenovnik = q("SELECT * FROM cenovnik ORDER BY naziv")
-        dogadjaji = q("SELECT * FROM dogadjaji ORDER BY id")
-        korisnici_data = q("SELECT id, ime, username, aktivan, admin FROM korisnici")
 
-        def to_list(rs):
-            # q() already returns list of dicts for PG, list of sqlite3.Row for sqlite
-            out = []
-            for r in rs:
-                try:
-                    out.append(dict(r))
-                except Exception:
-                    out.append(r)
-            return out
+    try:
+        # Export all tables to Excel
+        evidencija_rows = q("SELECT id,broj,datum_izd,datum_val,kupac_naziv,kupac_pib,kupac_mb,kupac_adresa,kupac_mesto,kupac_jbkjs,kupac_extra,dogadjaj_id,dogadjaj_naziv,osnov,pdv,ukupno,status,napomena,napomena_predracun,specifikacija,stavke,korisnik_ime,storno FROM evidencija ORDER BY id")
+        kupci_rows     = q("SELECT naziv,pib,mb,adresa,mesto,jbkjs FROM kupci ORDER BY naziv")
+        cenovnik_rows  = q("SELECT naziv,cena,pdv,status,specifikacija FROM cenovnik ORDER BY naziv")
+        dogadjaji_rows = q("SELECT id,naziv,datum,status,specifikacija FROM dogadjaji ORDER BY id")
 
-        data = {
-            'evidencija': to_list(rows),
-            'kupci': to_list(kupci),
-            'cenovnik': to_list(cenovnik),
-            'dogadjaji': to_list(dogadjaji),
-            'korisnici': to_list(korisnici_data),
-        }
-        fname = f"cmn_backup_{datetime.now().strftime('%Y%m%d_%H%M')}.json"
-        return send_file(
-            io.BytesIO(json.dumps(data, ensure_ascii=False, indent=2, default=str).encode('utf-8')),
-            mimetype='application/json',
-            as_attachment=True,
-            download_name=fname
-        )
+        def rows_to_df(rows):
+            if not rows: return pd.DataFrame()
+            return pd.DataFrame(rows)
+
+        buf = io.BytesIO()
+        with pd.ExcelWriter(buf, engine='openpyxl') as writer:
+            rows_to_df(kupci_rows).to_excel(writer, sheet_name='Kupci', index=False)
+            rows_to_df(cenovnik_rows).to_excel(writer, sheet_name='Cenovnik', index=False)
+            rows_to_df(dogadjaji_rows).to_excel(writer, sheet_name='Dogadjaji', index=False)
+            rows_to_df(evidencija_rows).to_excel(writer, sheet_name='Evidencija', index=False)
+        buf.seek(0)
+
+        fname = f"cmn_backup_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+        return send_file(buf,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True, download_name=fname)
+    except Exception as e:
+        return f"Greška pri backup-u: {str(e)}", 500
 
 @app.route('/korisnici')
 @login_required
